@@ -1,0 +1,26 @@
+with "config/manpoweroverthrowredoada_config.gpr";
+project Manpoweroverthrowredoada is
+
+   for Source_Dirs use ("src/", "config/", "binding/");
+   for Object_Dir use "obj/" & Manpoweroverthrowredoada_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
+   for Exec_Dir use "bin";
+   for Main use ("manpoweroverthrowredoada.adb");
+
+   package Compiler is
+      for Default_Switches ("Ada") use Manpoweroverthrowredoada_Config.Ada_Compiler_Switches;
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+   end Binder;
+   
+   package Linker is
+      for Default_Switches ("Ada") use ("-L/usr/lib", "-lallegro", "-lallegro_font", "-lallegro_image", "-lallegro_primitives");
+   end Linker;
+
+   package Install is
+      for Artifacts (".") use ("share");
+   end Install;
+
+end Manpoweroverthrowredoada;
