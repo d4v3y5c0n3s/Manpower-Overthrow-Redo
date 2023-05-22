@@ -5,7 +5,7 @@ with Interfaces.C; use Interfaces.C;
 with Interfaces.C.Strings;
 with Interfaces.C.Extensions;
 limited with allegro5_bitmap_h;
-limited with allegro5_events_h;
+with allegro5_events_h; use allegro5_events_h;
 with System;
 
 package allegro5_display_h is
