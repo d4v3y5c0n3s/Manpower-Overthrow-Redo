@@ -6,6 +6,7 @@ with allegro_primitives_h; use allegro_primitives_h;
 with allegro_image_h; use allegro_image_h;
 with allegro5_display_h; use allegro5_display_h;
 with allegro5_color_h; use allegro5_color_h;
+with allegro5_drawing_h; use allegro5_drawing_h;
 with Interfaces.C; use Interfaces.C;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Calendar; use Ada.Calendar;
@@ -36,7 +37,7 @@ procedure Manpoweroverthrowredoada is
   begin
     case State_In.S is
       when MainMenu =>
-        --:= al_map_rgb(0, 0, 0);
+        al_clear_to_color(al_map_rgb(0, 0, 0));
         --:= al_map_rgb(255, 255, 255);
         Put_Line("MainMenu!");
       when InLevel =>
