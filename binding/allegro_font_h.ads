@@ -6,7 +6,7 @@ with Interfaces.C.Strings;
 with Interfaces.C.Extensions;
 limited with allegro5_bitmap_h;
 with allegro5_color_h;
-limited with allegro5_utf8_h;
+with allegro5_utf8_h;
 with x86_64_linux_gnu_bits_stdint_uintn_h;
 with System;
 
