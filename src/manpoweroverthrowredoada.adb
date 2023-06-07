@@ -28,6 +28,7 @@ procedure Manpoweroverthrowredoada is
   type Scene_Data (Ops : Scene_Data_Options) is record
     case Ops is
       when Player =>
+        ID : Integer;
         PositionInWorld : Pos;
       when Enemy =>
         null;
@@ -70,6 +71,8 @@ procedure Manpoweroverthrowredoada is
     Mv_Left_KS : Key_State := Unpressed;
     Mv_Right_KS : Key_State := Unpressed;
   end record;
+  
+  PlayerMoveSpeed : constant Scalar := 1.0;
   
   function transform_by (P1 : Pos; P2 : Pos) return Pos is
   begin
@@ -158,27 +161,20 @@ procedure Manpoweroverthrowredoada is
   
   procedure Update_State (
     State_In_Out : in out Game_State_Access;
-    InpS : in out Input_State;
-    Event : access ALLEGRO_EVENT) is
+    InpS : in Input_State;
+    UpdateDelta : Duration) is
   begin
-    if Event /= null then
-      case Event.c_type is
-        when 42 => -- display close
-          State_In_Out := new Game_State(ExitGame);
-        when others =>
-          Update_Input(InpS, Event);
-      end case;
-    end if;
     case State_In_Out.S is
       when MainMenu =>
         if InpS.Start_KS = Pressed then
           State_In_Out := new Game_State(InLevel);
-          State_In_Out.Scn.Append(new Scene_Data'(Ops => Player, PositionInWorld => Pos'(X => 40.0, Y => 40.0)));
+          State_In_Out.Scn.Append(new Scene_Data'(Ops => Player, ID => 99, PositionInWorld => Pos'(X => 40.0, Y => 40.0)));
         end if;
       when InLevel =>
         if InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Pressed then
           null;
         elsif InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Unpressed then
+          --PlayerMoveSpeed used to move player, need to calculate based on time since last update for frame-independent movement
           null;
         elsif InpS.Mv_Down_KS = Pressed and InpS.Mv_Up_KS = Unpressed then
           null;
@@ -195,6 +191,8 @@ procedure Manpoweroverthrowredoada is
           case E.Ops is
             when Player =>
               for D of State_In_Out.Scn loop
+                --if E then
+                --end if;
                 Put_Line("Do player collisions & stuff here");
               end loop;
             when others =>
@@ -211,7 +209,6 @@ procedure Manpoweroverthrowredoada is
   
   UpdateInterval : constant Duration := 0.033;
   Frame_Start_Time : Time;
-  FrameTime : Duration;
   GS : Game_State_Access;
   Q : access ALLEGRO_EVENT_QUEUE;
   Display : access ALLEGRO_DISPLAY;
@@ -219,7 +216,7 @@ procedure Manpoweroverthrowredoada is
   KBEventSrc : access ALLEGRO_EVENT_SOURCE;
   Ev : access ALLEGRO_EVENT := new ALLEGRO_EVENT;
   InpState : Input_State;
-    NextEventExists : Boolean;
+  PrevUpdateTime : Time := Clock;
 begin
   if al_install_system(Interfaces.C.int(al_get_allegro_version), null) and
   al_install_keyboard and
@@ -235,13 +232,30 @@ begin
     loop
       Frame_Start_Time := Clock;
       Draw_Game(GS);
-      NextEventExists := Boolean(al_get_next_event(Q, Ev));
-      Update_State(GS, InpState, Ev);
-      exit when GS.S = ExitGame;
-      FrameTime := Clock - Frame_Start_Time;
-      if FrameTime < UpdateInterval then
-        delay UpdateInterval - FrameTime;
+      if al_get_next_event(Q, Ev) then
+        case Ev.c_type is
+          when 42 => -- display close
+            GS := new Game_State(ExitGame);
+          when others =>
+            Update_Input(InpState, Ev);
+        end case;
       end if;
+      UpdateStateDelta:
+        declare
+          CurrentUpdateTime : constant Time := Clock;
+        begin
+          Update_State(GS, InpState, CurrentUpdateTime - PrevUpdateTime);
+          PrevUpdateTime := CurrentUpdateTime;
+        end UpdateStateDelta;
+      exit when GS.S = ExitGame;
+      FrameTimeUpdate:
+        declare
+          FrameTime : constant Duration := Clock - Frame_Start_Time;
+        begin
+          if FrameTime < UpdateInterval then
+            delay UpdateInterval - FrameTime;
+          end if;
+        end FrameTimeUpdate;
     end loop;
     al_destroy_event_queue(Q);
     al_destroy_display(Display);
