@@ -30,6 +30,8 @@ procedure Manpoweroverthrowredoada is
       when Player =>
         ID : Integer;
         PositionInWorld : Pos;
+        Acceleration : Pos;
+        Velocity : Pos;
       when Enemy =>
         null;
       when Tile =>
@@ -72,7 +74,9 @@ procedure Manpoweroverthrowredoada is
     Mv_Right_KS : Key_State := Unpressed;
   end record;
   
-  PlayerMoveSpeed : constant Scalar := 1.0;
+  MaxPlayerMoveSpeed : constant Scalar := 40.0;
+  DefaultPlayerDeceleration : constant Scalar := 6.0;
+  DefaultPlayerAcceleration : constant Scalar := 2.0;
   
   function transform_by (P1 : Pos; P2 : Pos) return Pos is
   begin
@@ -168,33 +172,51 @@ procedure Manpoweroverthrowredoada is
       when MainMenu =>
         if InpS.Start_KS = Pressed then
           State_In_Out := new Game_State(InLevel);
-          State_In_Out.Scn.Append(new Scene_Data'(Ops => Player, ID => 99, PositionInWorld => Pos'(X => 40.0, Y => 40.0)));
+          State_In_Out.Scn.Append(new Scene_Data'(
+          Ops => Player,
+          ID => 99, 
+          PositionInWorld => Pos'(X => 40.0, Y => 40.0),
+          Acceleration => Pos'(X => 0.0, Y => 0.0),
+          Velocity => Pos'(X => 0.0, Y => 0.0)
+          ));
         end if;
       when InLevel =>
-        if InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Pressed then
-          null;
-        elsif InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Unpressed then
-          --PlayerMoveSpeed used to move player, need to calculate based on time since last update for frame-independent movement
-          null;
-        elsif InpS.Mv_Down_KS = Pressed and InpS.Mv_Up_KS = Unpressed then
-          null;
-        end if;
-        if InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Pressed then
-          null;
-        elsif InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Unpressed then
-          null;
-        elsif InpS.Mv_Right_KS = Pressed and InpS.Mv_Left_KS = Unpressed then
-          null;
-        end if;
-        
         for E of State_In_Out.Scn loop
           case E.Ops is
             when Player =>
+              if InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Pressed then
+                E.acceleration.Y := 0.0;
+              elsif InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Unpressed then
+                E.acceleration.Y := -DefaultPlayerAcceleration;
+                E.velocity.Y := E.velocity.Y + (Scalar(UpdateDelta) * (E.acceleration.Y * MaxPlayerMoveSpeed));
+              elsif InpS.Mv_Down_KS = Pressed and InpS.Mv_Up_KS = Unpressed then
+                E.acceleration.Y := DefaultPlayerAcceleration;
+                E.velocity.Y := E.velocity.Y + (Scalar(UpdateDelta) * (E.acceleration.Y * MaxPlayerMoveSpeed));
+              else
+                E.velocity.Y := E.velocity.Y + ((-E.velocity.Y) * DefaultPlayerDeceleration) * Scalar(UpdateDelta);
+              end if;
+              if InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Pressed then
+                E.acceleration.X := 0.0;
+                E.velocity.X := E.velocity.X * 0.1;
+              elsif InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Unpressed then
+                E.acceleration.X := -DefaultPlayerAcceleration;
+                E.velocity.X := E.velocity.X + (Scalar(UpdateDelta) * (E.acceleration.X * MaxPlayerMoveSpeed));
+              elsif InpS.Mv_Right_KS = Pressed and InpS.Mv_Left_KS = Unpressed then
+                E.acceleration.X := DefaultPlayerAcceleration;
+                E.velocity.X := E.velocity.X + (Scalar(UpdateDelta) * (E.acceleration.X * MaxPlayerMoveSpeed));
+              else
+                E.velocity.X := E.velocity.X + ((-E.velocity.X) * DefaultPlayerDeceleration) * Scalar(UpdateDelta);
+              end if;
               for D of State_In_Out.Scn loop
-                --if E then
-                --end if;
-                Put_Line("Do player collisions & stuff here");
+                if E.Ops = Enemy then
+                  Put_Line("Check if this enemy is touching the player here");
+                end if;
+                if E.Ops = Tile then
+                  Put_Line("Check if this tile is touching the player here");
+                end if;
               end loop;
+              E.PositionInWorld.X := E.PositionInWorld.X + (Scalar(UpdateDelta) * E.velocity.X);
+              E.PositionInWorld.Y := E.PositionInWorld.Y + (Scalar(UpdateDelta) * E.velocity.Y);
             when others =>
               null;
           end case;
