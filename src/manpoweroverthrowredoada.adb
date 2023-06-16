@@ -16,35 +16,43 @@ with Ada.Containers.Vectors;
 
 procedure Manpoweroverthrowredoada is
   
-  type Scalar is digits 9 range -1024.0 .. 1024.0;
+  type Scalar is digits 9 range -9000.0 .. 9000.0;
   
   type Pos is record
     X : Scalar;
     Y : Scalar;
   end record;
-  
-  type Scene_Data_Options is (Player, Enemy, Tile);
-  
-  type Scene_Data (Ops : Scene_Data_Options) is record
-    case Ops is
-      when Player =>
-        ID : Integer;
-        PositionInWorld : Pos;
-        Acceleration : Pos;
-        Velocity : Pos;
-      when Enemy =>
-        null;
-      when Tile =>
-        null;
-    end case;
+
+  type Player_Data is record
+    PositionInWorld : Pos;
+    Acceleration : Pos;
+    Velocity : Pos;
   end record;
   
-  type Scene_Data_Access is access Scene_Data;
-  
-  package Scene is new Ada.Containers.Vectors(
+  package PlayersInWorld is new Ada.Containers.Vectors(
     Index_Type => Natural,
-    Element_Type => Scene_Data_Access
+    Element_Type => Player_Data
   );
+  
+  type Enemy_Data is record
+    PositionInWorld : Pos;
+  end record;
+  
+  package EnemiesInWorld is new Ada.Containers.Vectors(
+    Index_Type => Natural,
+    Element_Type => Enemy_Data
+  );
+  
+  type Tile_Data is (None, Dirt);
+  
+  type Tiles_Array is array(Positive range <>, Positive range <>) of Tile_Data;
+  
+  type Tile_Grid(Width : Positive; Height : Positive) is record
+    Tiles : Tiles_Array(1 .. Width, 1 .. Height) := (Others => (Others => None));
+    GridOffset : Pos := Pos'(X => 0.0, Y => 0.0);
+    TileWidth : Positive := 32;
+    TileHeight : Positive := 32;
+  end record;
   
   type Possible_States is (MainMenu, InLevel, ExitGame);
   
@@ -55,7 +63,9 @@ procedure Manpoweroverthrowredoada is
         null;
       when InLevel =>
         ScreenPos : Pos := Pos'(X => 0.0, Y => 0.0);
-        Scn : Scene.Vector;
+        PIW : PlayersInWorld.Vector;
+        EIW : EnemiesInWorld.Vector;
+        TG : Tile_Grid(100, 100);
       when ExitGame =>
         null;
     end case;
@@ -90,27 +100,49 @@ procedure Manpoweroverthrowredoada is
         al_clear_to_color(al_map_rgb(0, 0, 0));
         al_draw_text(State_In.F, al_map_rgb(255, 255, 255), 0.0, 0.0, 0, New_String("Press start or noob"));
       when InLevel =>
-        al_clear_to_color(al_map_rgb(200, 200, 200));
-        for E of State_In.Scn loop
-          case E.Ops is
-            when Player =>
-              PlayerStuff:
-                declare
-                  TL : Pos := E.PositionInWorld;
-                  BR : Pos;
-                begin
-                  TL := transform_by(TL, State_In.ScreenPos);
-                  BR := transform_by(TL, Pos'(X => 100.0, Y => 100.0));
-                  al_draw_filled_rectangle(Float(TL.X), Float(TL.Y), Float(BR.X), Float(BR.Y), al_map_rgb(125, 125, 125));
-                end PlayerStuff;
-              null;
-            when Enemy =>
-              null;
-            when Tile =>
-              null;
-          end case;
+        al_clear_to_color(al_map_rgb(46, 52, 54));
+        TilesDraw:
+          declare
+            Tile_TL : Pos;
+            Tile_BR : Pos;
+          begin
+            for W in State_In.TG.Tiles'Range(1) loop
+              for H in State_In.TG.Tiles'Range(2) loop
+                Tile_TL := State_In.TG.GridOffset;
+                Tile_TL := transform_by(Tile_TL, Pos'(X => Scalar(((W - 1) mod State_In.TG.Width) * State_In.TG.TileWidth), Y => Scalar(((H - 1) mod State_In.TG.Height) * State_In.TG.TileHeight)));
+                Tile_BR := transform_by(Tile_TL, Pos'(X => Scalar(State_In.TG.TileWidth), Y => Scalar(State_In.TG.TileHeight)));
+                case State_In.TG.Tiles(W, H) is
+                  when None =>
+                    null;
+                  when Dirt =>
+                    al_draw_filled_rectangle(Float(Tile_TL.X), Float(Tile_TL.Y), Float(Tile_BR.X), Float(Tile_BR.Y), al_map_rgb(193, 125, 17));
+                end case;
+              end loop;
+            end loop;
+          end TilesDraw;
+        for P of State_In.PIW loop
+          PlayerDraw:
+            declare
+              TL : Pos := P.PositionInWorld;
+              BR : Pos;
+            begin
+              TL := transform_by(TL, State_In.ScreenPos);
+              BR := transform_by(TL, Pos'(X => 64.0, Y => 64.0));
+              al_draw_filled_rectangle(Float(TL.X), Float(TL.Y), Float(BR.X), Float(BR.Y), al_map_rgb(138, 226, 52));
+          end PlayerDraw;
         end loop;
-        al_draw_text(State_In.F, al_map_rgb(20, 20, 20), 0.0, 0.0, 0, New_String("Yo, it's a level"));
+        for E of State_In.EIW loop
+          EnemyDraw:
+            declare
+              TL : Pos := E.PositionInWorld;
+              BR : Pos;
+            begin
+              TL := transform_by(TL, State_In.ScreenPos);
+              BR := transform_by(TL, Pos'(X => 64.0, Y => 64.0));
+              al_draw_filled_rectangle(Float(TL.X), Float(TL.Y), Float(BR.X), Float(BR.Y), al_map_rgb(239, 41, 41));
+          end EnemyDraw;
+        end loop;
+        al_draw_text(State_In.F, al_map_rgb(54, 101, 164), 0.0, 0.0, 0, New_String("Yo, it's a level"));
       when ExitGame =>
         null;
     end case;
@@ -172,54 +204,44 @@ procedure Manpoweroverthrowredoada is
       when MainMenu =>
         if InpS.Start_KS = Pressed then
           State_In_Out := new Game_State(InLevel);
-          State_In_Out.Scn.Append(new Scene_Data'(
-          Ops => Player,
-          ID => 99, 
-          PositionInWorld => Pos'(X => 40.0, Y => 40.0),
-          Acceleration => Pos'(X => 0.0, Y => 0.0),
-          Velocity => Pos'(X => 0.0, Y => 0.0)
+          State_In_Out.PIW.Append(Player_Data'(
+            PositionInWorld => Pos'(X => 40.0, Y => 40.0),
+            Acceleration => Pos'(X => 0.0, Y => 0.0),
+            Velocity => Pos'(X => 0.0, Y => 0.0)
           ));
+          State_In_Out.EIW.Append(Enemy_Data'(PositionInWorld => Pos'(X => 100.0, Y => 100.0)));
+          State_In_Out.TG.Tiles(3, 3) := Dirt;
         end if;
       when InLevel =>
-        for E of State_In_Out.Scn loop
-          case E.Ops is
-            when Player =>
-              if InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Pressed then
-                E.acceleration.Y := 0.0;
-              elsif InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Unpressed then
-                E.acceleration.Y := -DefaultPlayerAcceleration;
-                E.velocity.Y := E.velocity.Y + (Scalar(UpdateDelta) * (E.acceleration.Y * MaxPlayerMoveSpeed));
-              elsif InpS.Mv_Down_KS = Pressed and InpS.Mv_Up_KS = Unpressed then
-                E.acceleration.Y := DefaultPlayerAcceleration;
-                E.velocity.Y := E.velocity.Y + (Scalar(UpdateDelta) * (E.acceleration.Y * MaxPlayerMoveSpeed));
-              else
-                E.velocity.Y := E.velocity.Y + ((-E.velocity.Y) * DefaultPlayerDeceleration) * Scalar(UpdateDelta);
-              end if;
-              if InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Pressed then
-                E.acceleration.X := 0.0;
-                E.velocity.X := E.velocity.X * 0.1;
-              elsif InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Unpressed then
-                E.acceleration.X := -DefaultPlayerAcceleration;
-                E.velocity.X := E.velocity.X + (Scalar(UpdateDelta) * (E.acceleration.X * MaxPlayerMoveSpeed));
-              elsif InpS.Mv_Right_KS = Pressed and InpS.Mv_Left_KS = Unpressed then
-                E.acceleration.X := DefaultPlayerAcceleration;
-                E.velocity.X := E.velocity.X + (Scalar(UpdateDelta) * (E.acceleration.X * MaxPlayerMoveSpeed));
-              else
-                E.velocity.X := E.velocity.X + ((-E.velocity.X) * DefaultPlayerDeceleration) * Scalar(UpdateDelta);
-              end if;
-              for D of State_In_Out.Scn loop
-                if E.Ops = Enemy then
-                  Put_Line("Check if this enemy is touching the player here");
-                end if;
-                if E.Ops = Tile then
-                  Put_Line("Check if this tile is touching the player here");
-                end if;
-              end loop;
-              E.PositionInWorld.X := E.PositionInWorld.X + (Scalar(UpdateDelta) * E.velocity.X);
-              E.PositionInWorld.Y := E.PositionInWorld.Y + (Scalar(UpdateDelta) * E.velocity.Y);
-            when others =>
-              null;
-          end case;
+        for P of State_In_Out.PIW loop
+          if InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Pressed then
+            P.acceleration.Y := 0.0;
+          elsif InpS.Mv_Up_KS = Pressed and InpS.Mv_Down_KS = Unpressed then
+            P.acceleration.Y := -DefaultPlayerAcceleration;
+            P.velocity.Y := P.velocity.Y + (Scalar(UpdateDelta) * (P.acceleration.Y * MaxPlayerMoveSpeed));
+          elsif InpS.Mv_Down_KS = Pressed and InpS.Mv_Up_KS = Unpressed then
+            P.acceleration.Y := DefaultPlayerAcceleration;
+            P.velocity.Y := P.velocity.Y + (Scalar(UpdateDelta) * (P.acceleration.Y * MaxPlayerMoveSpeed));
+          else
+            P.velocity.Y := P.velocity.Y + ((-P.velocity.Y) * DefaultPlayerDeceleration) * Scalar(UpdateDelta);
+          end if;
+          if InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Pressed then
+            P.acceleration.X := 0.0;
+            P.velocity.X := P.velocity.X * 0.1;
+          elsif InpS.Mv_Left_KS = Pressed and InpS.Mv_Right_KS = Unpressed then
+            P.acceleration.X := -DefaultPlayerAcceleration;
+            P.velocity.X := P.velocity.X + (Scalar(UpdateDelta) * (P.acceleration.X * MaxPlayerMoveSpeed));
+          elsif InpS.Mv_Right_KS = Pressed and InpS.Mv_Left_KS = Unpressed then
+            P.acceleration.X := DefaultPlayerAcceleration;
+            P.velocity.X := P.velocity.X + (Scalar(UpdateDelta) * (P.acceleration.X * MaxPlayerMoveSpeed));
+          else
+            P.velocity.X := P.velocity.X + ((-P.velocity.X) * DefaultPlayerDeceleration) * Scalar(UpdateDelta);
+          end if;
+            P.PositionInWorld.X := P.PositionInWorld.X + (Scalar(UpdateDelta) * P.velocity.X);
+            P.PositionInWorld.Y := P.PositionInWorld.Y + (Scalar(UpdateDelta) * P.velocity.Y);
+        end loop;
+        for E of State_In_Out.EIW loop
+          null;
         end loop;
       when ExitGame =>
         null;
