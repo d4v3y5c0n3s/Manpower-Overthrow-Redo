@@ -13,20 +13,16 @@ with Interfaces.C.Strings; use Interfaces.C.Strings;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Calendar; use Ada.Calendar;
 with Ada.Containers.Vectors;
+with enginebase; use enginebase;
 
 procedure Manpoweroverthrowredoada is
   
-  type Scalar is digits 9 range -9000.0 .. 9000.0;
-  
-  type Pos is record
-    X : Scalar;
-    Y : Scalar;
-  end record;
+  -- enemy vision implementation: first check for line-of-sight with player/other, THEN check vision cone
 
   type Player_Data is record
-    PositionInWorld : Pos;
-    Acceleration : Pos;
-    Velocity : Pos;
+    PositionInWorld : Vector2D;
+    Acceleration : Vector2D;
+    Velocity : Vector2D;
   end record;
   
   package PlayersInWorld is new Ada.Containers.Vectors(
@@ -34,8 +30,12 @@ procedure Manpoweroverthrowredoada is
     Element_Type => Player_Data
   );
   
+  type Enemy_Facing is (Up, Down, Left, Right);
+  
   type Enemy_Data is record
-    PositionInWorld : Pos;
+    PositionInWorld : Vector2D;
+    Facing : Enemy_Facing := Down;
+    VisionCone : ConvexPolygon2DAccess;
   end record;
   
   package EnemiesInWorld is new Ada.Containers.Vectors(
@@ -49,7 +49,7 @@ procedure Manpoweroverthrowredoada is
   
   type Tile_Grid(Width : Positive; Height : Positive) is record
     Tiles : Tiles_Array(1 .. Width, 1 .. Height) := (Others => (Others => None));
-    GridOffset : Pos := Pos'(X => 0.0, Y => 0.0);
+    GridOffset : Vector2D := Vector2D'(X => 0.0, Y => 0.0);
     TileWidth : Positive := 32;
     TileHeight : Positive := 32;
   end record;
@@ -62,7 +62,7 @@ procedure Manpoweroverthrowredoada is
       when MainMenu =>
         null;
       when InLevel =>
-        ScreenPos : Pos := Pos'(X => 0.0, Y => 0.0);
+        ScreenPos : Vector2D := Vector2D'(X => 0.0, Y => 0.0);
         PIW : PlayersInWorld.Vector;
         EIW : EnemiesInWorld.Vector;
         TG : Tile_Grid(100, 100);
@@ -86,11 +86,11 @@ procedure Manpoweroverthrowredoada is
   
   MaxPlayerMoveSpeed : constant Scalar := 40.0;
   DefaultPlayerDeceleration : constant Scalar := 6.0;
-  DefaultPlayerAcceleration : constant Scalar := 2.0;
+  DefaultPlayerAcceleration : constant Scalar := 5.0;
   
-  function transform_by (P1 : Pos; P2 : Pos) return Pos is
+  function transform_by (P1 : Vector2D; P2 : Vector2D) return Vector2D is
   begin
-    return Pos'(X => P1.X + P2.X, Y => P1.Y + P2.Y);
+    return Vector2D'(X => P1.X + P2.X, Y => P1.Y + P2.Y);
   end transform_by;
   
   procedure Draw_Game (State_In : in Game_State_Access) is
@@ -103,14 +103,14 @@ procedure Manpoweroverthrowredoada is
         al_clear_to_color(al_map_rgb(46, 52, 54));
         TilesDraw:
           declare
-            Tile_TL : Pos;
-            Tile_BR : Pos;
+            Tile_TL : Vector2D;
+            Tile_BR : Vector2D;
           begin
             for W in State_In.TG.Tiles'Range(1) loop
               for H in State_In.TG.Tiles'Range(2) loop
                 Tile_TL := State_In.TG.GridOffset;
-                Tile_TL := transform_by(Tile_TL, Pos'(X => Scalar(((W - 1) mod State_In.TG.Width) * State_In.TG.TileWidth), Y => Scalar(((H - 1) mod State_In.TG.Height) * State_In.TG.TileHeight)));
-                Tile_BR := transform_by(Tile_TL, Pos'(X => Scalar(State_In.TG.TileWidth), Y => Scalar(State_In.TG.TileHeight)));
+                Tile_TL := transform_by(Tile_TL, Vector2D'(X => Scalar(((W - 1) mod State_In.TG.Width) * State_In.TG.TileWidth), Y => Scalar(((H - 1) mod State_In.TG.Height) * State_In.TG.TileHeight)));
+                Tile_BR := transform_by(Tile_TL, Vector2D'(X => Scalar(State_In.TG.TileWidth), Y => Scalar(State_In.TG.TileHeight)));
                 case State_In.TG.Tiles(W, H) is
                   when None =>
                     null;
@@ -123,22 +123,22 @@ procedure Manpoweroverthrowredoada is
         for P of State_In.PIW loop
           PlayerDraw:
             declare
-              TL : Pos := P.PositionInWorld;
-              BR : Pos;
+              TL : Vector2D := P.PositionInWorld;
+              BR : Vector2D;
             begin
               TL := transform_by(TL, State_In.ScreenPos);
-              BR := transform_by(TL, Pos'(X => 64.0, Y => 64.0));
+              BR := transform_by(TL, Vector2D'(X => 64.0, Y => 64.0));
               al_draw_filled_rectangle(Float(TL.X), Float(TL.Y), Float(BR.X), Float(BR.Y), al_map_rgb(138, 226, 52));
           end PlayerDraw;
         end loop;
         for E of State_In.EIW loop
           EnemyDraw:
             declare
-              TL : Pos := E.PositionInWorld;
-              BR : Pos;
+              TL : Vector2D := E.PositionInWorld;
+              BR : Vector2D;
             begin
               TL := transform_by(TL, State_In.ScreenPos);
-              BR := transform_by(TL, Pos'(X => 64.0, Y => 64.0));
+              BR := transform_by(TL, Vector2D'(X => 64.0, Y => 64.0));
               al_draw_filled_rectangle(Float(TL.X), Float(TL.Y), Float(BR.X), Float(BR.Y), al_map_rgb(239, 41, 41));
           end EnemyDraw;
         end loop;
@@ -205,11 +205,11 @@ procedure Manpoweroverthrowredoada is
         if InpS.Start_KS = Pressed then
           State_In_Out := new Game_State(InLevel);
           State_In_Out.PIW.Append(Player_Data'(
-            PositionInWorld => Pos'(X => 40.0, Y => 40.0),
-            Acceleration => Pos'(X => 0.0, Y => 0.0),
-            Velocity => Pos'(X => 0.0, Y => 0.0)
+            PositionInWorld => Vector2D'(X => 40.0, Y => 40.0),
+            Acceleration => Vector2D'(X => 0.0, Y => 0.0),
+            Velocity => Vector2D'(X => 0.0, Y => 0.0)
           ));
-          State_In_Out.EIW.Append(Enemy_Data'(PositionInWorld => Pos'(X => 100.0, Y => 100.0)));
+          State_In_Out.EIW.Append(Enemy_Data'(PositionInWorld => Vector2D'(X => 100.0, Y => 100.0), Facing => Down, VisionCone => new ConvexPolygon2D'(Vector2D'(X => 0.0, Y => 0.0), Vector2D'(X => 0.0, Y => 0.0), Vector2D'(X => 0.0, Y => 0.0))));
           State_In_Out.TG.Tiles(3, 3) := Dirt;
         end if;
       when InLevel =>
@@ -261,6 +261,7 @@ procedure Manpoweroverthrowredoada is
   Ev : access ALLEGRO_EVENT := new ALLEGRO_EVENT;
   InpState : Input_State;
   PrevUpdateTime : Time := Clock;
+  pragma Assertion_Policy(Check);
 begin
   if al_install_system(Interfaces.C.int(al_get_allegro_version), null) and
   al_install_keyboard and
