@@ -10,14 +10,11 @@ with allegro5_drawing_h; use allegro5_drawing_h;
 with allegro_font_h; use allegro_font_h;
 with Interfaces.C; use Interfaces.C;
 with Interfaces.C.Strings; use Interfaces.C.Strings;
-with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Calendar; use Ada.Calendar;
 with Ada.Containers.Vectors;
 with enginebase; use enginebase;
 
 procedure Manpoweroverthrowredoada is
-  
-  -- enemy vision implementation: first check for line-of-sight with player/other, THEN check vision cone
 
   type Player_Data is record
     PositionInWorld : Vector2D;
@@ -261,7 +258,7 @@ procedure Manpoweroverthrowredoada is
   Ev : access ALLEGRO_EVENT := new ALLEGRO_EVENT;
   InpState : Input_State;
   PrevUpdateTime : Time := Clock;
-  pragma Assertion_Policy(Check);
+  Allegro_Initialization_Failure : exception;
 begin
   if al_install_system(Interfaces.C.int(al_get_allegro_version), null) and
   al_install_keyboard and
@@ -305,6 +302,6 @@ begin
     al_destroy_event_queue(Q);
     al_destroy_display(Display);
   else
-    Put_Line("Failure.");
+    raise Allegro_Initialization_Failure;
   end if;
 end Manpoweroverthrowredoada;

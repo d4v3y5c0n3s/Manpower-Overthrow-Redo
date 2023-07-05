@@ -29,16 +29,6 @@ package Enginebase is
   subtype ConvexPolygon2D is Polygon2D with Dynamic_Predicate => (for all I in ConvexPolygon2D'Range => (Vector2DCrossProduct(ConvexPolygon2D(I), ConvexPolygon2D(I mod ConvexPolygon2D'Length + 1)) < 0.0) = (Vector2DCrossProduct(ConvexPolygon2D(I - 2 mod ConvexPolygon2D'Length + 1), ConvexPolygon2D(I)) < 0.0));
   type Polygon2DAccess is access Polygon2D;
   type ConvexPolygon2DAccess is access ConvexPolygon2D;
-  --type FutureCollision is (NoCollisionComing, IncomingCollision);
-  --type Collision2D (F : FutureCollision) is record
-  --  CollidingNow : Boolean := false;
-  --  case F is
-  --    when IncomingCollision =>
-  --      Uncollide : Vector2D := Vector2D'(X => 0.0, Y => 0.0);
-  --    when NoCollisionComing =>
-  --      null;
-  --  end case;
-  --end record;
   type Collision2D is record
     CollidingNow : Boolean := false;
     CollisionComing : Boolean := false;
